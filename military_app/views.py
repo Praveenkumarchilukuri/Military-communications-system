@@ -185,7 +185,7 @@ def Logout(request):
 @login_required
 def SendColonelMessages(request):
     uname = request.session.get('uname')
-    output = '<option value="" disabled selected>Select Receiver</option>'
+    receivers = []
     
     con = get_db_connection()
     try:
@@ -193,11 +193,14 @@ def SendColonelMessages(request):
             cur.execute("select username, user_type from signup where status='Approved' and username != %s", (uname,))
             rows = cur.fetchall()
             for row in rows:
-                output += f'<option value="{row[0]}">{row[0]} ({row[1]})</option>'
+                receivers.append({
+                    'username': row[0],
+                    'usertype': row[1]
+                })
     finally:
         con.close()
         
-    context = {'receivers': output, 'sender': uname}
+    context = {'receivers': receivers, 'sender': uname}
     return render(request, 'SendColonelMessages.html', context)
 
 @login_required
@@ -248,20 +251,26 @@ def SendColonelMessagesAction(request):
 @login_required
 def ViewColonelMessages(request):
     uname = request.session.get('uname')
-    output = ""
+    messages = []
     
     con = get_db_connection()
     try:
         with con.cursor() as cur:
-            cur.execute("select * from messages where receiver_name=%s", (uname,))
+            cur.execute("select message_id, sender_name, receiver_name, message, encrypt_keys, msg_time, priority from messages where receiver_name=%s", (uname,))
             rows = cur.fetchall()
             for row in rows:
-                output += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td>{row[5]}</td>"
-                output += f"<td><a href='ReadColonelMessageView?t1={row[0]}'>Click Here</a></td></tr>"
+                messages.append({
+                    'id': row[0],
+                    'sender': row[1],
+                    'receiver': row[2],
+                    'message': row[3],
+                    'time': row[5],
+                    'priority': row[6]
+                })
     finally:
         con.close()
         
-    return render(request, 'ViewColonelMessages.html', {'data': output})
+    return render(request, 'ViewColonelMessages.html', {'messages': messages})
 
 @login_required
 def ReadColonelMessageView(request):
@@ -322,7 +331,7 @@ def ReadColonelMessage(request):
 @login_required
 def SendBrigadierMessages(request):
     uname = request.session.get('uname')
-    output = '<option value="" disabled selected>Select Receiver</option>'
+    receivers = []
     
     con = get_db_connection()
     try:
@@ -330,11 +339,14 @@ def SendBrigadierMessages(request):
             cur.execute("select username, user_type from signup where status='Approved' and username != %s", (uname,))
             rows = cur.fetchall()
             for row in rows:
-                output += f'<option value="{row[0]}">{row[0]} ({row[1]})</option>'
+                receivers.append({
+                    'username': row[0],
+                    'usertype': row[1]
+                })
     finally:
         con.close()
         
-    context = {'receivers': output, 'sender': uname}
+    context = {'receivers': receivers, 'sender': uname}
     return render(request, 'SendBrigadierMessages.html', context)
 
 @login_required
@@ -385,20 +397,26 @@ def SendBrigadierMessagesAction(request):
 @login_required
 def ViewBrigadierMessages(request):
     uname = request.session.get('uname')
-    output = ""
+    messages = []
     
     con = get_db_connection()
     try:
         with con.cursor() as cur:
-            cur.execute("select * from messages where receiver_name=%s", (uname,))
+            cur.execute("select message_id, sender_name, receiver_name, message, encrypt_keys, msg_time, priority from messages where receiver_name=%s", (uname,))
             rows = cur.fetchall()
             for row in rows:
-                output += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td>{row[5]}</td>"
-                output += f"<td><a href='ReadBrigadierMessageView?t1={row[0]}'>Click Here</a></td></tr>"
+                messages.append({
+                    'id': row[0],
+                    'sender': row[1],
+                    'receiver': row[2],
+                    'message': row[3],
+                    'time': row[5],
+                    'priority': row[6]
+                })
     finally:
         con.close()
         
-    return render(request, 'ViewBrigadierMessages.html', {'data': output})
+    return render(request, 'ViewBrigadierMessages.html', {'messages': messages})
 
 @login_required
 def ReadBrigadierMessageView(request):
@@ -457,18 +475,26 @@ def ReadBrigadierMessage(request):
 
 @login_required
 def ApproveColonel(request):
-    output = ''
+    users = []
     con = get_db_connection()
     try:
         with con.cursor() as cur:
-            cur.execute("select * from signup where user_type='Colonel' and status='Pending'")
+            cur.execute("select username, password, contact_no, gender, email, address, user_type, status from signup where user_type='Colonel' and status='Pending'")
             rows = cur.fetchall()
             for row in rows:
-                output += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td>{row[4]}</td><td>{row[5]}</td><td>{row[6]}</td><td>{row[7]}</td>"
-                output += f"<td><a href='ApproveColonelUser?t1={row[0]}'>Click Here</a></td></tr>"
+                users.append({
+                    'username': row[0],
+                    'password': row[1],
+                    'contact': row[2],
+                    'gender': row[3],
+                    'email': row[4],
+                    'address': row[5],
+                    'usertype': row[6],
+                    'status': row[7]
+                })
     finally:
         con.close()
-    return render(request, 'ApproveColonel.html', {'data': output})
+    return render(request, 'ApproveColonel.html', {'users': users})
 
 @login_required
 def ApproveColonelUser(request):
@@ -486,7 +512,7 @@ def ApproveColonelUser(request):
 @login_required
 def SendMessages(request): # Major sending messages
     uname = request.session.get('uname')
-    output = '<option value="" disabled selected>Select Receiver</option>'
+    receivers = []
     
     con = get_db_connection()
     try:
@@ -494,11 +520,14 @@ def SendMessages(request): # Major sending messages
             cur.execute("select username, user_type from signup where status='Approved' and username != %s", (uname,))
             rows = cur.fetchall()
             for row in rows:
-                output += f'<option value="{row[0]}">{row[0]} ({row[1]})</option>'
+                receivers.append({
+                    'username': row[0],
+                    'usertype': row[1]
+                })
     finally:
         con.close()
         
-    context = {'receivers': output, 'sender': uname}
+    context = {'receivers': receivers, 'sender': uname}
     return render(request, 'SendMessages.html', context)
 
 @login_required
@@ -549,20 +578,26 @@ def SendMessagesAction(request):
 @login_required
 def ViewMajorMessages(request):
     uname = request.session.get('uname')
-    output = ""
+    messages = []
     
     con = get_db_connection()
     try:
         with con.cursor() as cur:
-            cur.execute("select * from messages where receiver_name=%s", (uname,))
+            cur.execute("select message_id, sender_name, receiver_name, message, encrypt_keys, msg_time, priority from messages where receiver_name=%s", (uname,))
             rows = cur.fetchall()
             for row in rows:
-                output += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td>{row[5]}</td>"
-                output += f"<td><a href='ReadMajorMessageView?t1={row[0]}'>Click Here</a></td></tr>"
+                messages.append({
+                    'id': row[0],
+                    'sender': row[1],
+                    'receiver': row[2],
+                    'message': row[3],
+                    'time': row[5],
+                    'priority': row[6]
+                })
     finally:
         con.close()
         
-    return render(request, 'ViewMajorMessages.html', {'data': output})
+    return render(request, 'ViewMajorMessages.html', {'messages': messages})
 
 @login_required
 def ReadMajorMessageView(request):
@@ -621,18 +656,26 @@ def ReadMajorMessage(request):
 
 @login_required
 def ApproveBrigadier(request):
-    output = ''
+    users = []
     con = get_db_connection()
     try:
         with con.cursor() as cur:
-            cur.execute("select * from signup where user_type='Brigadier' and status='Pending'")
+            cur.execute("select username, password, contact_no, gender, email, address, user_type, status from signup where user_type='Brigadier' and status='Pending'")
             rows = cur.fetchall()
             for row in rows:
-                output += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td>{row[4]}</td><td>{row[5]}</td><td>{row[6]}</td><td>{row[7]}</td>"
-                output += f"<td><a href='ApproveBrigadierUser?t1={row[0]}'>Click Here</a></td></tr>"
+                users.append({
+                    'username': row[0],
+                    'password': row[1],
+                    'contact': row[2],
+                    'gender': row[3],
+                    'email': row[4],
+                    'address': row[5],
+                    'usertype': row[6],
+                    'status': row[7]
+                })
     finally:
         con.close()
-    return render(request, 'ApproveBrigadier.html', {'data': output})
+    return render(request, 'ApproveBrigadier.html', {'users': users})
 
 @login_required
 def ApproveBrigadierUser(request):
@@ -648,18 +691,26 @@ def ApproveBrigadierUser(request):
 
 @login_required
 def ApproveMajor(request):
-    output = ''
+    users = []
     con = get_db_connection()
     try:
         with con.cursor() as cur:
-            cur.execute("select * from signup where user_type='Major General' and status='Pending'")
+            cur.execute("select username, password, contact_no, gender, email, address, user_type, status from signup where user_type='Major General' and status='Pending'")
             rows = cur.fetchall()
             for row in rows:
-                output += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td>{row[4]}</td><td>{row[5]}</td><td>{row[6]}</td><td>{row[7]}</td>"
-                output += f"<td><a href='ApproveMajorUser?t1={row[0]}'>Click Here</a></td></tr>"
+                users.append({
+                    'username': row[0],
+                    'password': row[1],
+                    'contact': row[2],
+                    'gender': row[3],
+                    'email': row[4],
+                    'address': row[5],
+                    'usertype': row[6],
+                    'status': row[7]
+                })
     finally:
         con.close()
-    return render(request, 'ApproveMajor.html', {'data': output})
+    return render(request, 'ApproveMajor.html', {'users': users})
 
 @login_required
 def ApproveMajorUser(request):
