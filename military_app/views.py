@@ -1,42 +1,61 @@
 from django.shortcuts import render, redirect
 from django.contrib import messages
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 import pymysql
-from .crypt import vigenereEncryption, polybiusEncryption, polybiusDecryption, vigenereDecryption
+from .crypt import (vigenereEncryption, polybiusEncryption, polybiusDecryption, 
+                    vigenereDecryption, hybrid_encrypt, hybrid_decrypt)
+from .utils import (hash_password, verify_password, log_audit, get_client_ip, 
+                    login_required_check, create_notification, get_admin_credentials, 
+                    get_smtp_credentials, get_db_connection)
+from .steganography import hide_message_in_image, extract_message_from_image
 import datetime
 import random
 import string
 import smtplib
 from email.message import EmailMessage
 from django.conf import settings
+from functools import wraps
+import os
+import base64
 
-# Database connection helper
-def get_db_connection():
-    return pymysql.connect(
-        host=settings.DATABASES['default']['HOST'],
-        port=int(settings.DATABASES['default']['PORT']),
-        user=settings.DATABASES['default']['USER'],
-        password=settings.DATABASES['default']['PASSWORD'],
-        database=settings.DATABASES['default']['NAME'],
-        charset='utf8'
-    )
+from functools import wraps
+import os
+import base64
 
-def sendEmail(decrypt_key, recipient_email):
+# Login required decorator
+def login_required(view_func):
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not login_required_check(request):
+            return redirect('UserLogin')
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+def sendEmail(decrypt_key, recipient_email, aes_key=None):
+    """Send decryption keys to recipient via email"""
     # PRINT KEY TO CONSOLE FOR TESTING
     print("="*50)
     print(f"DECRYPTION KEY FOR {recipient_email}: {decrypt_key}")
+    if aes_key:
+        print(f"AES KEY: {aes_key}")
     print("="*50)
 
+    smtp_creds = get_smtp_credentials()
+    
+    email_content = f"Vigenere Key to decrypt message: {decrypt_key}"
+    if aes_key:
+        email_content += f"\n\nAES-256 Key: {aes_key}"
+    
     msg = EmailMessage()
-    msg.set_content("Key to decrypt message: " + decrypt_key)
+    msg.set_content(email_content)
     msg['Subject'] = 'Message From Military Application'
-    msg['From'] = "evotingotp4@gmail.com"
+    msg['From'] = smtp_creds['email']
     msg['To'] = recipient_email
 
     try:
         s = smtplib.SMTP('smtp.gmail.com', 587)
         s.starttls()
-        s.login("evotingotp4@gmail.com", "xowpojqyiygprhgr")
+        s.login(smtp_creds['email'], smtp_creds['password'])
         s.send_message(msg)
         s.quit()
     except Exception as e:
@@ -58,11 +77,22 @@ def AdminLoginAction(request):
     if request.method == 'POST':
         username = request.POST.get('t1', False)
         password = request.POST.get('t2', False)
-        if username == 'admin' and password == 'admin':
+        
+        admin_creds = get_admin_credentials()
+        
+        if username == admin_creds['username'] and password == admin_creds['password']:
             request.session['uname'] = username
+            request.session['utype'] = 'Admin'
+            
+            # Log successful admin login
+            log_audit(username, 'admin_login', 'Admin logged in successfully', get_client_ip(request))
+            
             context = {'data': 'welcome ' + username}
             return render(request, 'AdminScreen.html', context)
         else:
+            # Log failed admin login
+            log_audit(username or 'unknown', 'failed_admin_login', 'Failed admin login attempt', get_client_ip(request))
+            
             context = {'data': 'invalid login details'}
             return render(request, 'AdminLogin.html', context)
     return render(request, 'AdminLogin.html', {})
@@ -79,12 +109,15 @@ def UserLoginAction(request):
                 cur.execute("select username, password, user_type, email FROM signup where status='Approved' and username=%s", (username,))
                 row = cur.fetchone()
                 
-                if row and row[1] == password:
+                if row and verify_password(password, row[1]):
                     request.session['uname'] = username
                     request.session['email'] = row[3]
                     request.session['utype'] = row[2]
                     
                     db_usertype = row[2]
+                    
+                    # Log successful login
+                    log_audit(username, 'user_login', f'User logged in as {db_usertype}', get_client_ip(request))
                     
                     if usertype == db_usertype:
                         if usertype == 'Major General':
@@ -93,6 +126,9 @@ def UserLoginAction(request):
                             return render(request, 'BrigadierScreen.html', {'data': f'welcome {username} You Logged in as {usertype}'})
                         elif usertype == 'Colonel':
                             return render(request, 'ColonelScreen.html', {'data': f'welcome {username} You Logged in as {usertype}'})
+                else:
+                    # Log failed login
+                    log_audit(username or 'unknown', 'failed_login', f'Failed login attempt for user type {usertype}', get_client_ip(request))
                     
         finally:
             con.close()
@@ -118,15 +154,35 @@ def SignupAction(request):
                 if cur.fetchone():
                     return render(request, 'Signup.html', {'data': f"{username} Username already exists"})
                 
+                # Hash password before storing
+                hashed_password = hash_password(password)
+                
                 sql = "INSERT INTO signup(username,password,contact_no,gender,email,address,user_type,status) VALUES(%s,%s,%s,%s,%s,%s,%s,'Pending')"
-                cur.execute(sql, (username, password, contact, gender, email, address, usertype))
+                cur.execute(sql, (username, hashed_password, contact, gender, email, address, usertype))
                 con.commit()
+                
+                # Log signup
+                log_audit(username, 'signup', f'New user signup as {usertype}', get_client_ip(request))
+                
                 return render(request, 'Signup.html', {'data': 'Signup Process Completed'})
         finally:
             con.close()
     return render(request, 'Signup.html', {})
 
+def Logout(request):
+    """Logout view to clear session"""
+    username = request.session.get('uname', 'unknown')
+    
+    # Log logout
+    log_audit(username, 'logout', 'User logged out', get_client_ip(request))
+    
+    # Clear session
+    request.session.flush()
+    
+    return redirect('index')
+
 # Colonel Views
+@login_required
 def SendColonelMessages(request):
     uname = request.session.get('uname')
     output = '<option value="" disabled selected>Select Receiver</option>'

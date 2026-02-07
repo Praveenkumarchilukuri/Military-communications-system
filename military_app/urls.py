@@ -10,6 +10,7 @@ urlpatterns = [
     path('AdminLoginAction', views.AdminLoginAction, name='AdminLoginAction'),
     path('UserLoginAction', views.UserLoginAction, name='UserLoginAction'),
     path('SignupAction', views.SignupAction, name='SignupAction'),
+    path('Logout', views.Logout, name='Logout'),
     
     # Colonel
     path('SendColonelMessages', views.SendColonelMessages, name='SendColonelMessages'),
