@@ -200,48 +200,52 @@ def SendColonelMessages(request):
     context = {'receivers': output, 'sender': uname}
     return render(request, 'SendColonelMessages.html', context)
 
+@login_required
 def SendColonelMessagesAction(request):
     if request.method == 'POST':
         receiver = request.POST.get('t1')
         sender = request.session.get('uname')
         message = request.POST.get('t4').upper()
+        priority = request.POST.get('t5', 'ROUTINE')
         
         now = datetime.datetime.now()
         current_time = now.strftime("%Y-%m-%d %H:%M:%S")
         
-        words = message.split()
-        keys = []
-        mykeys = ""
+        # Generate Vigenere key for entire message
+        vigenere_key = ''.join((random.choice(string.ascii_uppercase) for x in range(len(message))))
         
-        for word in words:
-            temp = ''.join((random.choice(string.ascii_uppercase) for x in range(len(word))))
-            keys.append(temp)
-            mykeys += temp + " "
-            
-        hybrid_cipher = ""
-        mykeys = mykeys.strip()
+        # Use hybrid encryption
+        encrypted_message, aes_key = hybrid_encrypt(message, vigenere_key)
         
-        for i in range(len(words)):
-            temp1 = vigenereEncryption(words[i], keys[i])
-            temp2 = polybiusEncryption(temp1)
-            hybrid_cipher += temp2 + " "
-            
         con = get_db_connection()
         try:
             with con.cursor() as cur:
-                # Get next ID (auto-increment is better but following logic)
+                # Get receiver email for sending keys
+                cur.execute("select email FROM signup where username=%s", (receiver,))
+                receiver_row = cur.fetchone()
+                receiver_email = receiver_row[0] if receiver_row else None
+                
+                # Get next ID
                 cur.execute("select count(*) FROM messages")
                 count = cur.fetchone()[0] + 1
                 
-                sql = "INSERT INTO messages(message_id,sender_name,receiver_name,message,encrypt_keys,msg_time) VALUES(%s,%s,%s,%s,%s,%s)"
-                cur.execute(sql, (count, sender, receiver, hybrid_cipher, mykeys, current_time))
+                sql = "INSERT INTO messages(message_id,sender_name,receiver_name,message,encrypt_keys,aes_key,msg_time,priority,is_read) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+                cur.execute(sql, (count, sender, receiver, encrypted_message, vigenere_key, aes_key, current_time, priority, False))
                 con.commit()
+                
+                # Send keys via email
+                if receiver_email:
+                    sendEmail(vigenere_key, receiver_email, aes_key)
+                
+                # Log audit
+                log_audit(sender, 'message_sent', f'Sent {priority} message to {receiver}', get_client_ip(request))
         finally:
             con.close()
             
         return render(request, 'ColonelScreen.html', {'data': f"Encrypted message sent to {receiver}"})
     return render(request, 'ColonelScreen.html', {})
 
+@login_required
 def ViewColonelMessages(request):
     uname = request.session.get('uname')
     output = ""
@@ -259,6 +263,7 @@ def ViewColonelMessages(request):
         
     return render(request, 'ViewColonelMessages.html', {'data': output})
 
+@login_required
 def ReadColonelMessageView(request):
     msg_id = request.GET.get('t1')
     email = request.session.get('email')
@@ -266,47 +271,47 @@ def ReadColonelMessageView(request):
     con = get_db_connection()
     try:
         with con.cursor() as cur:
-            cur.execute("select encrypt_keys from messages where message_id=%s", (msg_id,))
+            cur.execute("select encrypt_keys, aes_key from messages where message_id=%s", (msg_id,))
             row = cur.fetchone()
             if row:
-                mykeys = row[0]
-                sendEmail(mykeys, email)
+                vigenere_key = row[0]
+                aes_key = row[1]
+                sendEmail(vigenere_key, email, aes_key)
     finally:
         con.close()
         
     return render(request, 'ReadColonelMessageView.html', {'msg_id': msg_id})
 
+@login_required
 def ReadColonelMessage(request):
     if request.method == 'POST':
         msg_id = request.POST.get('t1')
-        enter_key = request.POST.get('t2')
+        vigenere_key = request.POST.get('t2')
+        aes_key = request.POST.get('t3')
+        username = request.session.get('uname')
         
         con = get_db_connection()
         try:
             with con.cursor() as cur:
-                cur.execute("select message, encrypt_keys from messages where message_id=%s", (msg_id,))
+                cur.execute("select message, encrypt_keys, aes_key from messages where message_id=%s", (msg_id,))
                 row = cur.fetchone()
                 if row:
-                    decrypt_msg = row[0]
-                    mykeys = row[1]
+                    encrypted_message = row[0]
+                    stored_vigenere_key = row[1]
+                    stored_aes_key = row[2]
                     
-                    if enter_key == mykeys:
-                        keys = mykeys.split()
-                        ciphers = decrypt_msg.split()
+                    if vigenere_key == stored_vigenere_key and aes_key == stored_aes_key:
+                        # Use hybrid decryption
+                        decrypted_message = hybrid_decrypt(encrypted_message, vigenere_key, aes_key)
                         
-                        output = ""
-                        index = 0
-                        # The logic in original code was a bit weird with index.
-                        # ciphers is a list of encrypted words. keys is a list of keys.
-                        # They should match 1-to-1.
+                        # Mark message as read
+                        cur.execute("UPDATE messages SET is_read=TRUE WHERE message_id=%s", (msg_id,))
+                        con.commit()
                         
-                        for i, key in enumerate(keys):
-                            if i < len(ciphers):
-                                temp1 = polybiusDecryption(ciphers[i])
-                                temp2 = vigenereDecryption(temp1, key)
-                                output += temp2 + " "
-                                
-                        return render(request, 'ColonelScreen.html', {'data': "Decrypted Message: " + output.lower()})
+                        # Log audit
+                        log_audit(username, 'message_decrypted', f'Decrypted message {msg_id}', get_client_ip(request))
+                        
+                        return render(request, 'ColonelScreen.html', {'data': "Decrypted Message: " + decrypted_message.lower()})
                     else:
                         return render(request, 'ColonelScreen.html', {'data': "Invalid key entered"})
         finally:
@@ -314,6 +319,7 @@ def ReadColonelMessage(request):
     return render(request, 'ColonelScreen.html', {})
 
 # Brigadier Views
+@login_required
 def SendBrigadierMessages(request):
     uname = request.session.get('uname')
     output = '<option value="" disabled selected>Select Receiver</option>'
@@ -331,49 +337,52 @@ def SendBrigadierMessages(request):
     context = {'receivers': output, 'sender': uname}
     return render(request, 'SendBrigadierMessages.html', context)
 
+@login_required
 def SendBrigadierMessagesAction(request):
-    # Same logic as Colonel
-    # Removed early return reusing Colonel action as we want to control template rendering
     if request.method == 'POST':
         receiver = request.POST.get('t1')
         sender = request.session.get('uname')
         message = request.POST.get('t4').upper()
+        priority = request.POST.get('t5', 'ROUTINE')
         
         now = datetime.datetime.now()
         current_time = now.strftime("%Y-%m-%d %H:%M:%S")
         
-        words = message.split()
-        keys = []
-        mykeys = ""
+        # Generate Vigenere key for entire message
+        vigenere_key = ''.join((random.choice(string.ascii_uppercase) for x in range(len(message))))
         
-        for word in words:
-            temp = ''.join((random.choice(string.ascii_uppercase) for x in range(len(word))))
-            keys.append(temp)
-            mykeys += temp + " "
-            
-        hybrid_cipher = ""
-        mykeys = mykeys.strip()
+        # Use hybrid encryption
+        encrypted_message, aes_key = hybrid_encrypt(message, vigenere_key)
         
-        for i in range(len(words)):
-            temp1 = vigenereEncryption(words[i], keys[i])
-            temp2 = polybiusEncryption(temp1)
-            hybrid_cipher += temp2 + " "
-            
         con = get_db_connection()
         try:
             with con.cursor() as cur:
+                # Get receiver email for sending keys
+                cur.execute("select email FROM signup where username=%s", (receiver,))
+                receiver_row = cur.fetchone()
+                receiver_email = receiver_row[0] if receiver_row else None
+                
+                # Get next ID
                 cur.execute("select count(*) FROM messages")
                 count = cur.fetchone()[0] + 1
                 
-                sql = "INSERT INTO messages(message_id,sender_name,receiver_name,message,encrypt_keys,msg_time) VALUES(%s,%s,%s,%s,%s,%s)"
-                cur.execute(sql, (count, sender, receiver, hybrid_cipher, mykeys, current_time))
+                sql = "INSERT INTO messages(message_id,sender_name,receiver_name,message,encrypt_keys,aes_key,msg_time,priority,is_read) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+                cur.execute(sql, (count, sender, receiver, encrypted_message, vigenere_key, aes_key, current_time, priority, False))
                 con.commit()
+                
+                # Send keys via email
+                if receiver_email:
+                    sendEmail(vigenere_key, receiver_email, aes_key)
+                
+                # Log audit
+                log_audit(sender, 'message_sent', f'Sent {priority} message to {receiver}', get_client_ip(request))
         finally:
             con.close()
             
         return render(request, 'BrigadierScreen.html', {'data': f"Encrypted message sent to {receiver}"})
     return render(request, 'BrigadierScreen.html', {})
 
+@login_required
 def ViewBrigadierMessages(request):
     uname = request.session.get('uname')
     output = ""
@@ -391,6 +400,7 @@ def ViewBrigadierMessages(request):
         
     return render(request, 'ViewBrigadierMessages.html', {'data': output})
 
+@login_required
 def ReadBrigadierMessageView(request):
     msg_id = request.GET.get('t1')
     email = request.session.get('email')
@@ -398,48 +408,54 @@ def ReadBrigadierMessageView(request):
     con = get_db_connection()
     try:
         with con.cursor() as cur:
-            cur.execute("select encrypt_keys from messages where message_id=%s", (msg_id,))
+            cur.execute("select encrypt_keys, aes_key from messages where message_id=%s", (msg_id,))
             row = cur.fetchone()
             if row:
-                mykeys = row[0]
-                sendEmail(mykeys, email)
+                vigenere_key = row[0]
+                aes_key = row[1]
+                sendEmail(vigenere_key, email, aes_key)
     finally:
         con.close()
         
     return render(request, 'ReadBrigadierMessageView.html', {'msg_id': msg_id})
 
+@login_required
 def ReadBrigadierMessage(request):
     if request.method == 'POST':
         msg_id = request.POST.get('t1')
-        enter_key = request.POST.get('t2')
+        vigenere_key = request.POST.get('t2')
+        aes_key = request.POST.get('t3')
+        username = request.session.get('uname')
         
         con = get_db_connection()
         try:
             with con.cursor() as cur:
-                cur.execute("select message, encrypt_keys from messages where message_id=%s", (msg_id,))
+                cur.execute("select message, encrypt_keys, aes_key from messages where message_id=%s", (msg_id,))
                 row = cur.fetchone()
                 if row:
-                    decrypt_msg = row[0]
-                    mykeys = row[1]
+                    encrypted_message = row[0]
+                    stored_vigenere_key = row[1]
+                    stored_aes_key = row[2]
                     
-                    if enter_key == mykeys:
-                        keys = mykeys.split()
-                        ciphers = decrypt_msg.split()
+                    if vigenere_key == stored_vigenere_key and aes_key == stored_aes_key:
+                        # Use hybrid decryption
+                        decrypted_message = hybrid_decrypt(encrypted_message, vigenere_key, aes_key)
                         
-                        output = ""
-                        for i, key in enumerate(keys):
-                            if i < len(ciphers):
-                                temp1 = polybiusDecryption(ciphers[i])
-                                temp2 = vigenereDecryption(temp1, key)
-                                output += temp2 + " "
-                                
-                        return render(request, 'BrigadierScreen.html', {'data': "Decrypted Message: " + output.lower()})
+                        # Mark message as read
+                        cur.execute("UPDATE messages SET is_read=TRUE WHERE message_id=%s", (msg_id,))
+                        con.commit()
+                        
+                        # Log audit
+                        log_audit(username, 'message_decrypted', f'Decrypted message {msg_id}', get_client_ip(request))
+                        
+                        return render(request, 'BrigadierScreen.html', {'data': "Decrypted Message: " + decrypted_message.lower()})
                     else:
                         return render(request, 'BrigadierScreen.html', {'data': "Invalid key entered"})
         finally:
             con.close()
     return render(request, 'BrigadierScreen.html', {})
 
+@login_required
 def ApproveColonel(request):
     output = ''
     con = get_db_connection()
@@ -454,6 +470,7 @@ def ApproveColonel(request):
         con.close()
     return render(request, 'ApproveColonel.html', {'data': output})
 
+@login_required
 def ApproveColonelUser(request):
     user = request.GET.get('t1')
     con = get_db_connection()
@@ -466,6 +483,7 @@ def ApproveColonelUser(request):
     return render(request, 'BrigadierScreen.html', {'data': "Colonel account approved"})
 
 # Major Views
+@login_required
 def SendMessages(request): # Major sending messages
     uname = request.session.get('uname')
     output = '<option value="" disabled selected>Select Receiver</option>'
@@ -483,47 +501,52 @@ def SendMessages(request): # Major sending messages
     context = {'receivers': output, 'sender': uname}
     return render(request, 'SendMessages.html', context)
 
+@login_required
 def SendMessagesAction(request):
     if request.method == 'POST':
         receiver = request.POST.get('t1')
         sender = request.session.get('uname')
         message = request.POST.get('t4').upper()
+        priority = request.POST.get('t5', 'ROUTINE')
         
         now = datetime.datetime.now()
         current_time = now.strftime("%Y-%m-%d %H:%M:%S")
         
-        words = message.split()
-        keys = []
-        mykeys = ""
+        # Generate Vigenere key for entire message
+        vigenere_key = ''.join((random.choice(string.ascii_uppercase) for x in range(len(message))))
         
-        for word in words:
-            temp = ''.join((random.choice(string.ascii_uppercase) for x in range(len(word))))
-            keys.append(temp)
-            mykeys += temp + " "
-            
-        hybrid_cipher = ""
-        mykeys = mykeys.strip()
+        # Use hybrid encryption
+        encrypted_message, aes_key = hybrid_encrypt(message, vigenere_key)
         
-        for i in range(len(words)):
-            temp1 = vigenereEncryption(words[i], keys[i])
-            temp2 = polybiusEncryption(temp1)
-            hybrid_cipher += temp2 + " "
-            
         con = get_db_connection()
         try:
             with con.cursor() as cur:
+                # Get receiver email for sending keys
+                cur.execute("select email FROM signup where username=%s", (receiver,))
+                receiver_row = cur.fetchone()
+                receiver_email = receiver_row[0] if receiver_row else None
+                
+                # Get next ID
                 cur.execute("select count(*) FROM messages")
                 count = cur.fetchone()[0] + 1
                 
-                sql = "INSERT INTO messages(message_id,sender_name,receiver_name,message,encrypt_keys,msg_time) VALUES(%s,%s,%s,%s,%s,%s)"
-                cur.execute(sql, (count, sender, receiver, hybrid_cipher, mykeys, current_time))
+                sql = "INSERT INTO messages(message_id,sender_name,receiver_name,message,encrypt_keys,aes_key,msg_time,priority,is_read) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+                cur.execute(sql, (count, sender, receiver, encrypted_message, vigenere_key, aes_key, current_time, priority, False))
                 con.commit()
+                
+                # Send keys via email
+                if receiver_email:
+                    sendEmail(vigenere_key, receiver_email, aes_key)
+                
+                # Log audit
+                log_audit(sender, 'message_sent', f'Sent {priority} message to {receiver}', get_client_ip(request))
         finally:
             con.close()
             
         return render(request, 'MajorScreen.html', {'data': f"Encrypted message sent to {receiver}"})
     return render(request, 'MajorScreen.html', {})
 
+@login_required
 def ViewMajorMessages(request):
     uname = request.session.get('uname')
     output = ""
@@ -541,6 +564,7 @@ def ViewMajorMessages(request):
         
     return render(request, 'ViewMajorMessages.html', {'data': output})
 
+@login_required
 def ReadMajorMessageView(request):
     msg_id = request.GET.get('t1')
     email = request.session.get('email')
@@ -548,48 +572,54 @@ def ReadMajorMessageView(request):
     con = get_db_connection()
     try:
         with con.cursor() as cur:
-            cur.execute("select encrypt_keys from messages where message_id=%s", (msg_id,))
+            cur.execute("select encrypt_keys, aes_key from messages where message_id=%s", (msg_id,))
             row = cur.fetchone()
             if row:
-                mykeys = row[0]
-                sendEmail(mykeys, email)
+                vigenere_key = row[0]
+                aes_key = row[1]
+                sendEmail(vigenere_key, email, aes_key)
     finally:
         con.close()
         
     return render(request, 'ReadMajorMessageView.html', {'msg_id': msg_id})
 
+@login_required
 def ReadMajorMessage(request):
     if request.method == 'POST':
         msg_id = request.POST.get('t1')
-        enter_key = request.POST.get('t2')
+        vigenere_key = request.POST.get('t2')
+        aes_key = request.POST.get('t3')
+        username = request.session.get('uname')
         
         con = get_db_connection()
         try:
             with con.cursor() as cur:
-                cur.execute("select message, encrypt_keys from messages where message_id=%s", (msg_id,))
+                cur.execute("select message, encrypt_keys, aes_key from messages where message_id=%s", (msg_id,))
                 row = cur.fetchone()
                 if row:
-                    decrypt_msg = row[0]
-                    mykeys = row[1]
+                    encrypted_message = row[0]
+                    stored_vigenere_key = row[1]
+                    stored_aes_key = row[2]
                     
-                    if enter_key == mykeys:
-                        keys = mykeys.split()
-                        ciphers = decrypt_msg.split()
+                    if vigenere_key == stored_vigenere_key and aes_key == stored_aes_key:
+                        # Use hybrid decryption
+                        decrypted_message = hybrid_decrypt(encrypted_message, vigenere_key, aes_key)
                         
-                        output = ""
-                        for i, key in enumerate(keys):
-                            if i < len(ciphers):
-                                temp1 = polybiusDecryption(ciphers[i])
-                                temp2 = vigenereDecryption(temp1, key)
-                                output += temp2 + " "
-                                
-                        return render(request, 'MajorScreen.html', {'data': "Decrypted Message: " + output.lower()})
+                        # Mark message as read
+                        cur.execute("UPDATE messages SET is_read=TRUE WHERE message_id=%s", (msg_id,))
+                        con.commit()
+                        
+                        # Log audit
+                        log_audit(username, 'message_decrypted', f'Decrypted message {msg_id}', get_client_ip(request))
+                        
+                        return render(request, 'MajorScreen.html', {'data': "Decrypted Message: " + decrypted_message.lower()})
                     else:
                         return render(request, 'MajorScreen.html', {'data': "Given key is not valid"})
         finally:
             con.close()
     return render(request, 'MajorScreen.html', {})
 
+@login_required
 def ApproveBrigadier(request):
     output = ''
     con = get_db_connection()
@@ -604,6 +634,7 @@ def ApproveBrigadier(request):
         con.close()
     return render(request, 'ApproveBrigadier.html', {'data': output})
 
+@login_required
 def ApproveBrigadierUser(request):
     user = request.GET.get('t1')
     con = get_db_connection()
@@ -615,6 +646,7 @@ def ApproveBrigadierUser(request):
         con.close()
     return render(request, 'MajorScreen.html', {'data': "Brigadier account approved"})
 
+@login_required
 def ApproveMajor(request):
     output = ''
     con = get_db_connection()
@@ -629,6 +661,7 @@ def ApproveMajor(request):
         con.close()
     return render(request, 'ApproveMajor.html', {'data': output})
 
+@login_required
 def ApproveMajorUser(request):
     user = request.GET.get('t1')
     con = get_db_connection()
