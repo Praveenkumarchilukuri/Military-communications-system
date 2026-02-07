@@ -18,10 +18,6 @@ from functools import wraps
 import os
 import base64
 
-from functools import wraps
-import os
-import base64
-
 # Login required decorator
 def login_required(view_func):
     @wraps(view_func)
