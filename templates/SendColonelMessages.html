@@ -13,7 +13,10 @@
                     <td>Choose Receiver</td>
                     <td>
                         <select name="t1">
-                            {{ receivers|safe }}
+                            <option value="" disabled selected>Select Receiver</option>
+                            {% for receiver in receivers %}
+                            <option value="{{ receiver.username }}">{{ receiver.username }} ({{ receiver.usertype }})</option>
+                            {% endfor %}
                         </select>
                     </td>
                 </tr>

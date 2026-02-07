@@ -13,9 +13,20 @@
                 <th>Receiver</th>
                 <th>Encrypted Message</th>
                 <th>Date</th>
+                <th>Priority</th>
                 <th>Action</th>
             </tr>
-            {{ data|safe }}
+            {% for message in messages %}
+            <tr>
+                <td>{{ message.id }}</td>
+                <td>{{ message.sender }}</td>
+                <td>{{ message.receiver }}</td>
+                <td>{{ message.message }}</td>
+                <td>{{ message.time }}</td>
+                <td>{{ message.priority }}</td>
+                <td><a href="ReadBrigadierMessageView?t1={{ message.id }}">Click Here</a></td>
+            </tr>
+            {% endfor %}
         </table>
     </center>
 </body>
