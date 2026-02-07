@@ -1,3 +1,6 @@
 django
 pymysql
-cryptography
+bcrypt
+pycryptodome
+Pillow
+python-decouple
