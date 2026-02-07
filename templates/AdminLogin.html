@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <div class="login-form">
+        <h2>Admin Login</h2>
+        <form action="AdminLoginAction" method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" name="t1" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="t2" required>
+            </div>
+            <div class="form-group" style="text-align: center;">
+                <input type="submit" value="Login" class="submit-btn">
+            </div>
+        </form>
+        
+        {% if data %}
+        <div class="error-msg">
+            {{ data }}
+        </div>
+        {% endif %}
+    </div>
+{% endblock %}

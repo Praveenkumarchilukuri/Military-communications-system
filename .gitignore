@@ -1,0 +1,25 @@
+# .gitignore for Python/Django projects
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+*.env
+.env.*
+.DS_Store
+*.egg-info/
+staticfiles/
+node_modules/
+
+# VS Code
+.vscode/
+
+# Django
+media/
+static/
+
+# OS
+Thumbs.db

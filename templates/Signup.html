@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <div class="login-form">
+        <h2>New User Signup</h2>
+        <form action="SignupAction" method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" name="t1" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="t2" required>
+            </div>
+            <div class="form-group">
+                <label>Contact No</label>
+                <input type="text" name="t3" required>
+            </div>
+            <div class="form-group">
+                <label>Gender</label>
+                <select name="t4">
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" name="t5" required>
+            </div>
+            <div class="form-group">
+                <label>Address</label>
+                <textarea name="t6" required style="width: 250px; height: 60px;"></textarea>
+            </div>
+            <div class="form-group">
+                <label>User Type</label>
+                <select name="t7">
+                    <option value="Major General">Major General</option>
+                    <option value="Brigadier">Brigadier</option>
+                    <option value="Colonel">Colonel</option>
+                </select>
+            </div>
+            <div class="form-group" style="text-align: center;">
+                <input type="submit" value="Register" class="submit-btn" style="background-color: #E20000; color: white; border: none;">
+            </div>
+        </form>
+        
+        {% if data %}
+        <div class="success-msg">
+            {{ data }}
+        </div>
+        {% endif %}
+    </div>
+{% endblock %}

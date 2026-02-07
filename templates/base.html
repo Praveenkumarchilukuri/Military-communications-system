@@ -1,0 +1,27 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Military Communications</title>
+    <link rel="stylesheet" type="text/css" href="{% static 'css/style.css' %}">
+</head>
+<body>
+
+    <div class="header">
+        <h1>Military Communications Applications</h1>
+    </div>
+
+    <div class="navbar">
+        <a href="{% url 'index' %}">Home</a>
+        <a href="{% url 'AdminLogin' %}">Admin Login</a>
+        <a href="{% url 'UserLogin' %}">User Login</a>
+        <a href="{% url 'Signup' %}">New User Signup Here</a>
+    </div>
+
+    <div class="main-container">
+        {% block content %}
+        {% endblock %}
+    </div>
+
+</body>
+</html>

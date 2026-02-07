@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>View Messages</title>
+</head>
+<body>
+    <center>
+        <h2>Inbox (Colonel)</h2>
+        <table border="1">
+            <tr>
+                <th>Message ID</th>
+                <th>Sender</th>
+                <th>Receiver</th>
+                <th>Encrypted Message</th>
+                <th>Date</th>
+                <th>Action</th>
+            </tr>
+            {{ data|safe }}
+        </table>
+    </center>
+</body>
+</html>

@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <!-- Key exchange graphic placeholder -->
+    <div style="margin-bottom: 2rem;">
+        <div style="display: flex; justify-content: center; align-items: center; gap: 40px;">
+            <div style="font-size: 80px;">📱</div>
+            <div style="font-size: 50px; color: #009688;">⬅️🔑</div>
+            <div style="font-size: 50px; color: #009688;">🔑➡️</div>
+            <div style="font-size: 80px;">🖥️</div>
+        </div>
+    </div>
+
+    <div class="login-form">
+        <h2>New User Login Screen</h2>
+        <form action="UserLoginAction" method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" name="t1" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="t2" required>
+            </div>
+            <div class="form-group">
+                <label>User Type</label>
+                <select name="t3">
+                    <option value="Major General">Major General</option>
+                    <option value="Brigadier">Brigadier</option>
+                    <option value="Colonel">Colonel</option>
+                </select>
+            </div>
+            <div class="form-group" style="text-align: center;">
+                <input type="submit" value="Login" class="submit-btn">
+            </div>
+        </form>
+        
+        {% if data %}
+        <div class="error-msg">
+            {{ data }}
+        </div>
+        {% endif %}
+    </div>
+{% endblock %}

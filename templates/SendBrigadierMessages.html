@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Send Message</title>
+</head>
+<body>
+    <center>
+        <h2>Send Message (Brigadier)</h2>
+        <form action="SendBrigadierMessagesAction" method="post">
+            {% csrf_token %}
+            <table border="1">
+                <tr>
+                    <td>Choose Receiver</td>
+                    <td>
+                        <select name="t1">
+                            {{ receivers|safe }}
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Sender Name</td>
+                    <td><input type="text" name="t2" value="{{ sender }}" readonly></td>
+                </tr>
+                <tr>
+                    <td>Subject</td>
+                    <td><input type="text" name="t3"></td>
+                </tr>
+                <tr>
+                    <td>Message</td>
+                    <td><textarea name="t4" rows="5" cols="30"></textarea></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td><input type="submit" value="Send Encrypted Message"></td>
+                </tr>
+            </table>
+        </form>
+    </center>
+</body>
+</html>

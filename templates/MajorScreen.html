@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Major General Screen</title>
+</head>
+<body>
+    <center>
+        <h2>Welcome Major General</h2>
+        <a href="SendMessages">Send Message</a> | 
+        <a href="ViewMajorMessages">View Messages</a> | 
+        <a href="ApproveBrigadier">Approve Brigadier</a> | 
+        <a href="index">Logout</a>
+        <hr>
+        <h3>{{ data }}</h3>
+        
+        <!-- Decryption Form if needed -->
+        {% if "Decrypted Message" in data or "Invalid key" in data %}
+            <!-- Already shown in data -->
+        {% else %}
+             <!-- This part is tricky because ReadMajorMessage returns to this screen with data. 
+                  But the form to enter key is in ReadMajorMessageView? No, ReadMajorMessageView is GET.
+                  Wait, ReadMajorMessageView shows the input for key?
+                  Let's check views.py.
+                  ReadMajorMessageView renders ReadMajorMessageView.html.
+                  ReadMajorMessage (POST) renders MajorScreen.html with result.
+             -->
+        {% endif %}
+    </center>
+</body>
+</html>
